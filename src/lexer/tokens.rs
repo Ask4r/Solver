@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenType<'a> {
     Space,
     Plus,
@@ -12,7 +12,7 @@ pub enum TokenType<'a> {
     Word(&'a str),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token<'a> {
     pub kind: TokenType<'a>,
     pub pos: usize,
