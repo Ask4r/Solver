@@ -1,19 +1,39 @@
 #[derive(Clone, Debug, PartialEq)]
-pub enum TokenType<'a> {
-    Space,
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Caret,
-    LParen,
-    RParen,
-    Number(f64),
-    Word(&'a str),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Token<'a> {
-    pub kind: TokenType<'a>,
-    pub pos: usize,
+pub enum TextToken<'a> {
+    Space {
+        pos: usize,
+    },
+    Plus {
+        pos: usize,
+    },
+    Minus {
+        pos: usize,
+    },
+    Star {
+        pos: usize,
+    },
+    Slash {
+        pos: usize,
+    },
+    Caret {
+        pos: usize,
+    },
+    LParen {
+        pos: usize,
+    },
+    RParen {
+        pos: usize,
+    },
+    Comma {
+        pos: usize,
+    },
+    Number {
+        text: &'a str,
+        value: f64,
+        pos: usize,
+    },
+    Word {
+        text: &'a str,
+        pos: usize,
+    },
 }

@@ -1,12 +1,12 @@
 use errors::{LexerError, UnknownSymbolError};
 use once_cell::sync::Lazy;
 use regex::Regex;
-use tokens::{Token, TokenType};
+pub use tokens::TextToken;
 
-mod errors;
+pub mod errors;
 mod tokens;
 
-static NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(\d*\.)?\d+").unwrap());
+static NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d*\.?\d+").unwrap());
 static WORD_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z_]+").unwrap());
 
 pub struct Lexer<'a> {
@@ -19,19 +19,11 @@ impl<'a> Lexer<'a> {
         Self { text, pos: 0 }
     }
 
-    pub fn analyse(&mut self) -> Result<Vec<Token>, UnknownSymbolError> {
+    pub fn analyse(&mut self) -> Result<Vec<TextToken>, UnknownSymbolError> {
         let mut tokens = Vec::new();
         loop {
-            match self.next_token() {
-                Ok((kind, size)) => {
-                    if !matches!(kind, TokenType::Space) {
-                        tokens.push(Token {
-                            kind,
-                            pos: self.pos,
-                        })
-                    }
-                    self.pos += size;
-                }
+            let token = match self.next_token() {
+                Ok(token) => token,
                 Err(LexerError::EOF) => return Ok(tokens),
                 Err(LexerError::Unknown(ch)) => {
                     return Err(UnknownSymbolError {
@@ -40,40 +32,51 @@ impl<'a> Lexer<'a> {
                         symbol: ch,
                     })
                 }
+            };
+            match token {
+                TextToken::Space { .. } => self.pos += 1,
+                TextToken::Word { text, .. } | TextToken::Number { text, .. } => {
+                    tokens.push(token);
+                    self.pos += text.len();
+                }
+                char_token => {
+                    tokens.push(char_token);
+                    self.pos += 1;
+                }
             }
         }
     }
 
-    fn next_token(&self) -> Result<(TokenType<'a>, usize), LexerError> {
+    fn next_token(&self) -> Result<TextToken<'a>, LexerError> {
         let text = &self.text[self.pos..];
-
         if text.len() == 0 {
             return Err(LexerError::EOF);
         }
-
         if let Some(mat) = NUMBER_REGEX.find(text) {
-            let kind = TokenType::Number(mat.as_str().parse::<f64>().unwrap());
-            return Ok((kind, mat.len()));
+            return Ok(TextToken::Number {
+                text: mat.as_str(),
+                value: mat.as_str().parse::<f64>().unwrap(),
+                pos: self.pos,
+            });
         }
-
         if let Some(mat) = WORD_REGEX.find(text) {
-            let kind = TokenType::Word(mat.as_str());
-            return Ok((kind, mat.len()));
+            return Ok(TextToken::Word {
+                text: mat.as_str(),
+                pos: self.pos,
+            });
         }
-
-        let kind = match text.chars().next().unwrap() {
-            ch if ch.is_whitespace() => TokenType::Space,
-            '+' => TokenType::Plus,
-            '-' => TokenType::Minus,
-            '*' => TokenType::Star,
-            '/' => TokenType::Slash,
-            '^' => TokenType::Caret,
-            '(' => TokenType::LParen,
-            ')' => TokenType::RParen,
-            ch => return Err(LexerError::Unknown(ch)),
-        };
-
-        Ok((kind, 1))
+        match text.chars().next().unwrap() {
+            ch if ch.is_whitespace() => Ok(TextToken::Space { pos: self.pos }),
+            '+' => Ok(TextToken::Plus { pos: self.pos }),
+            '-' => Ok(TextToken::Minus { pos: self.pos }),
+            '*' => Ok(TextToken::Star { pos: self.pos }),
+            '/' => Ok(TextToken::Slash { pos: self.pos }),
+            '^' => Ok(TextToken::Caret { pos: self.pos }),
+            '(' => Ok(TextToken::LParen { pos: self.pos }),
+            ')' => Ok(TextToken::RParen { pos: self.pos }),
+            ',' => Ok(TextToken::Comma { pos: self.pos }),
+            ch => Err(LexerError::Unknown(ch)),
+        }
     }
 }
 
@@ -87,30 +90,19 @@ mod tests {
         let mut lexer = Lexer::new(text);
         let tokens = lexer.analyse().unwrap();
         let expected = vec![
-            Token {
-                kind: TokenType::Word("sin"),
+            TextToken::Word {
+                text: "sin",
                 pos: 0,
             },
-            Token {
-                kind: TokenType::LParen,
-                pos: 3,
-            },
-            Token {
-                kind: TokenType::Word("x"),
-                pos: 4,
-            },
-            Token {
-                kind: TokenType::Caret,
-                pos: 6,
-            },
-            Token {
-                kind: TokenType::Number(2.0),
+            TextToken::LParen { pos: 3 },
+            TextToken::Word { text: "x", pos: 4 },
+            TextToken::Caret { pos: 6 },
+            TextToken::Number {
+                text: "2",
+                value: 2.0,
                 pos: 8,
             },
-            Token {
-                kind: TokenType::RParen,
-                pos: 9,
-            },
+            TextToken::RParen { pos: 9 },
         ];
         assert!(tokens.iter().eq(&expected));
     }
@@ -129,21 +121,21 @@ mod tests {
         let tok2 = lex2.analyse().unwrap();
         let tok3 = lex3.analyse().unwrap();
 
-        assert!(tok1.iter().eq(&vec![Token {
-            kind: TokenType::Number(2.0),
+        assert!(tok1.iter().eq(&vec![TextToken::Number {
+            text: "2",
+            value: 2.0,
             pos: 0,
         }]));
-        assert!(tok2.iter().eq(&vec![Token {
-            kind: TokenType::Number(0.14),
+        assert!(tok2.iter().eq(&vec![TextToken::Number {
+            text: ".14",
+            value: 0.14,
             pos: 0,
         }]));
         assert!(tok3.iter().eq(&vec![
-            Token {
-                kind: TokenType::Minus,
-                pos: 0,
-            },
-            Token {
-                kind: TokenType::Number(0.1),
+            TextToken::Minus { pos: 0 },
+            TextToken::Number {
+                text: "0.1",
+                value: 0.1,
                 pos: 1,
             },
         ]));
