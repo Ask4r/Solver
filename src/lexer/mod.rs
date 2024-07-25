@@ -1,81 +1,128 @@
-use errors::{LexerError, UnknownSymbolError};
-use once_cell::sync::Lazy;
-use regex::Regex;
-pub use tokens::TextToken;
+use errors::UnknownSymbolError;
+pub use tokens::Token;
+use std::f64;
 
 pub mod errors;
 mod tokens;
 
-static NUMBER_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^\d*\.?\d+").unwrap());
-static WORD_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z_]+").unwrap());
-
-pub struct Lexer<'a> {
-    text: &'a str,
+#[allow(dead_code)]
+pub struct Lexer {
+    source: Vec<u8>,
     pos: usize,
+    read_pos: usize,
+    ch: u8,
+    tokens: Vec<Token>,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(text: &'a str) -> Self {
-        Self { text, pos: 0 }
+#[allow(dead_code)]
+impl Lexer {
+    pub fn new(input: String) -> Self {
+        let mut lex = Self {
+            source: input.into_bytes(),
+            pos: 0,
+            read_pos: 0,
+            ch: 0,
+            tokens: Vec::new(),
+        };
+        lex.read_ch();
+        return lex;
     }
 
-    pub fn analyse(&mut self) -> Result<Vec<TextToken>, UnknownSymbolError> {
-        let mut tokens = Vec::new();
+    pub fn parse(&mut self) -> Result<Vec<Token>, UnknownSymbolError> {
+        let mut token;
         loop {
-            let token = match self.next_token() {
-                Ok(token) => token,
-                Err(LexerError::EOF) => return Ok(tokens),
-                Err(LexerError::Unknown(ch)) => {
-                    return Err(UnknownSymbolError {
-                        source: self.text,
-                        pos: self.pos,
-                        symbol: ch,
-                    })
-                }
-            };
-            match token {
-                TextToken::Space { .. } => self.pos += 1,
-                TextToken::Word { text, .. } | TextToken::Number { text, .. } => {
-                    tokens.push(token);
-                    self.pos += text.len();
-                }
-                char_token => {
-                    tokens.push(char_token);
-                    self.pos += 1;
-                }
+            token = self.next_token()?;
+            if matches!(token, Token::EOF) { break }
+            self.tokens.push(token.clone());
+        }
+        Ok(self.tokens.clone())
+    }
+
+    fn next_token(&mut self) -> Result<Token, UnknownSymbolError> {
+        use Token::*;
+        self.skip_whitespace();
+
+        let tok = match self.ch {
+            b'+' => Plus { pos: self.pos },
+            b'-' => match self.tokens.last() {
+                Some(Number { .. } | RParen { .. } | Var { .. } | Const { .. })
+                    => Minus { pos: self.pos },
+                _ => UM { pos: self.pos }
+            },
+            b'*' => Star { pos: self.pos },
+            b'/' => Slash { pos: self.pos },
+            b'^' => Caret { pos: self.pos },
+            b'(' => LParen { pos: self.pos },
+            b')' => RParen { pos: self.pos },
+            b',' => Comma { pos: self.pos },
+            b'0'..=b'9' | b'.' => {
+                let text = self.read_number();
+                let size = text.len();
+                return Ok(match text.parse::<f64>() {
+                    Ok(value) => Number { text, value, pos: self.pos - size },
+                    Err(_) => return Err(self.error_unknown_symbol(text)),
+                });
             }
+            b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
+                let text = self.read_ident();
+                let size = text.len();
+                return Ok(match text.as_str() {
+                    "x" => Var { pos: self.pos - size },
+                    "sin" => Func { text, func: f64::sin, pos: self.pos - size },
+                    "cos" => Func { text, func: f64::cos, pos: self.pos - size },
+                    "exp" => Func { text, func: f64::exp, pos: self.pos - size },
+                    "ln" => Func { text, func: f64::ln, pos: self.pos - size },
+                    "sqrt" => Func { text, func: f64::sqrt, pos: self.pos - size },
+                    "e" => Const { text, value: std::f64::consts::E, pos: self.pos - size },
+                    "pi" => Const { text, value: std::f64::consts::PI, pos: self.pos - size },
+                    _ => return Err(self.error_unknown_symbol(text)),
+                });
+            }
+            0 => Token::EOF,
+            ch => return Err(self.error_unknown_symbol(ch.to_string())),
+        };
+
+        self.read_ch();
+        Ok(tok)
+    }
+
+    fn read_ch(&mut self) {
+        if self.read_pos >= self.source.len() {
+            self.ch = 0;
+        } else {
+            self.ch = self.source[self.read_pos];
+        }
+        self.pos = self.read_pos;
+        self.read_pos += 1;
+    }
+
+    fn skip_whitespace(&mut self) {
+        while self.ch.is_ascii_whitespace() {
+            self.read_ch();
         }
     }
 
-    fn next_token(&self) -> Result<TextToken<'a>, LexerError> {
-        let text = &self.text[self.pos..];
-        if text.len() == 0 {
-            return Err(LexerError::EOF);
+    fn read_number(&mut self) -> String {
+        let pos = self.pos;
+        while self.ch.is_ascii_digit() || self.ch == b'.' {
+            self.read_ch();
         }
-        if let Some(mat) = NUMBER_REGEX.find(text) {
-            return Ok(TextToken::Number {
-                text: mat.as_str(),
-                value: mat.as_str().parse::<f64>().unwrap(),
-                pos: self.pos,
-            });
+        String::from_utf8_lossy(&self.source[pos..self.pos]).to_string()
+    }
+
+    fn read_ident(&mut self) -> String {
+        let pos = self.pos;
+        while self.ch.is_ascii_alphabetic() || self.ch == b'_' {
+            self.read_ch();
         }
-        if let Some(mat) = WORD_REGEX.find(text) {
-            return Ok(TextToken::Word {
-                text: mat.as_str(),
-                pos: self.pos,
-            });
-        }
-        match text.chars().next().unwrap() {
-            ch if ch.is_whitespace() => Ok(TextToken::Space { pos: self.pos }),
-            '+' => Ok(TextToken::Plus { pos: self.pos }),
-            '-' => Ok(TextToken::Minus { pos: self.pos }),
-            '*' => Ok(TextToken::Star { pos: self.pos }),
-            '/' => Ok(TextToken::Slash { pos: self.pos }),
-            '^' => Ok(TextToken::Caret { pos: self.pos }),
-            '(' => Ok(TextToken::LParen { pos: self.pos }),
-            ')' => Ok(TextToken::RParen { pos: self.pos }),
-            ',' => Ok(TextToken::Comma { pos: self.pos }),
-            ch => Err(LexerError::Unknown(ch)),
+        String::from_utf8_lossy(&self.source[pos..self.pos]).to_string()
+    }
+
+    fn error_unknown_symbol(&self, symbol: String) -> UnknownSymbolError {
+        UnknownSymbolError {
+            source: String::from_utf8_lossy(&self.source).to_string(),
+            pos: self.pos - symbol.len(),
+            symbol,
         }
     }
 }
@@ -83,61 +130,20 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use Token::*;
 
     #[test]
     fn it_works() {
-        let text = "sin(x ^ 2)";
-        let mut lexer = Lexer::new(text);
-        let tokens = lexer.analyse().unwrap();
-        let expected = vec![
-            TextToken::Word {
-                text: "sin",
-                pos: 0,
-            },
-            TextToken::LParen { pos: 3 },
-            TextToken::Word { text: "x", pos: 4 },
-            TextToken::Caret { pos: 6 },
-            TextToken::Number {
-                text: "2",
-                value: 2.0,
-                pos: 8,
-            },
-            TextToken::RParen { pos: 9 },
-        ];
-        assert!(tokens.iter().eq(&expected));
-    }
+        let text = "-2 * sin(x)";
+        let mut lex = Lexer::new(text.into());
+        let tokens = lex.parse().unwrap();
 
-    #[test]
-    fn it_parses_numbers() {
-        let num1 = "2";
-        let num2 = ".14";
-        let num3 = "-0.1";
-
-        let mut lex1 = Lexer::new(num1);
-        let mut lex2 = Lexer::new(num2);
-        let mut lex3 = Lexer::new(num3);
-
-        let tok1 = lex1.analyse().unwrap();
-        let tok2 = lex2.analyse().unwrap();
-        let tok3 = lex3.analyse().unwrap();
-
-        assert!(tok1.iter().eq(&vec![TextToken::Number {
-            text: "2",
-            value: 2.0,
-            pos: 0,
-        }]));
-        assert!(tok2.iter().eq(&vec![TextToken::Number {
-            text: ".14",
-            value: 0.14,
-            pos: 0,
-        }]));
-        assert!(tok3.iter().eq(&vec![
-            TextToken::Minus { pos: 0 },
-            TextToken::Number {
-                text: "0.1",
-                value: 0.1,
-                pos: 1,
-            },
-        ]));
+        assert_eq!(tokens[0], UM { pos: 0 });
+        assert_eq!(tokens[1], Number { text: "2".into(), value: 2.0, pos: 1 });
+        assert_eq!(tokens[2], Star { pos: 3 });
+        assert_eq!(tokens[3], Func { text: "sin".into(), func: f64::sin, pos: 5 });
+        assert_eq!(tokens[4], LParen { pos: 8 });
+        assert_eq!(tokens[5], Var { pos: 9 });
+        assert_eq!(tokens[6], RParen { pos: 10 });
     }
 }
