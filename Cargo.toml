@@ -1,7 +1,11 @@
 [package]
 name = "solver"
 version = "0.1.0"
+authors = ["Ask4r <dv4askar@gmail.com>"]
 edition = "2021"
+description = "Solver for mathematical expressions"
+repository = "https://github.com/Ask4r/Solver"
 
 [dependencies]
+clap = { version = "4.5.11", features = ["derive"] }
 getopts = "0.2.21"
