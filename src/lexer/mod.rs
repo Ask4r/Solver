@@ -1,11 +1,9 @@
+use crate::tokens::Token;
 use errors::UnknownSymbolError;
-pub use tokens::Token;
 use std::f64;
 
 pub mod errors;
-mod tokens;
 
-#[allow(dead_code)]
 pub struct Lexer {
     source: Vec<u8>,
     pos: usize,
@@ -14,7 +12,6 @@ pub struct Lexer {
     tokens: Vec<Token>,
 }
 
-#[allow(dead_code)]
 impl Lexer {
     pub fn new(input: String) -> Self {
         let mut lex = Self {

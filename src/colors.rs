@@ -4,12 +4,11 @@ pub fn green<T: Display>(text: T) -> String {
     format!("\x1B[32m{}\x1B[0m", text)
 }
 pub fn yellow<T: Display>(text: T) -> String {
-    format!("\x1B[32m{}\x1B[0m", text)
+    format!("\x1B[33m{}\x1B[0m", text)
 }
 pub fn cyan<T: Display>(text: T) -> String {
     format!("\x1B[36m{}\x1B[0m", text)
 }
-
 
 pub fn bold_white<T: Display>(text: T) -> String {
     format!("\x1B[1;29m{}\x1B[0m", text)

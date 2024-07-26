@@ -5,6 +5,7 @@ use parser::Parser;
 use std::fmt;
 
 pub mod colors;
+pub mod tokens;
 mod lexer;
 mod parser;
 
@@ -69,8 +70,5 @@ fn eval(expr: String) {
         Err(e) => return print_error(e),
     };
 
-    println!();
-    for tok in parsed_tokens {
-        println!("{:?}", tok)
-    }
+    for tok in parsed_tokens { println!("{:?}", tok) }
 }

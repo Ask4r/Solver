@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::tokens::Token;
 use errors::ParsingError;
 
 mod errors;
@@ -86,6 +86,6 @@ mod test {
         assert_eq!(parsed_toks[5], Caret { pos: 14 });
         assert_eq!(parsed_toks[6], Func { text: "sin".into(), func: f64::sin, pos: 8 });
         assert_eq!(parsed_toks[7], Star { pos: 6 });
-        assert_eq!(parsed_toks[8], Plus { pos: 2 });
+        assert_eq!(parsed_toks[8], Plus { pos: 5 });
     }
 }
