@@ -2,26 +2,22 @@ use crate::colors::{bold_white, bold_yellow};
 use std::fmt;
 
 #[derive(Clone, Debug)]
-pub struct ParsingError {
-    source: String,
-    text: String,
+pub struct ParsingError<'src> {
+    source: &'src str,
+    text: &'src str,
     pos: usize,
 }
 
-impl ParsingError {
-    pub fn new(source: String, text: String, pos: usize) -> Self {
+impl<'src> ParsingError<'src> {
+    pub fn new(source: &'src str, text: &'src str, pos: usize) -> Self {
         Self { source, text, pos }
     }
 }
 
-impl fmt::Display for ParsingError {
+impl fmt::Display for ParsingError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}\n{}\n{}",
-            bold_white(format!("parsing error `{}` at {}", self.text, self.pos)),
-            self.source,
-            bold_yellow(" ".repeat(self.pos) + &"^".repeat(self.text.len())),
-        )
+        let brief = format!("parsing error `{}` at {}", self.text, self.pos);
+        let cursor = " ".repeat(self.pos) + &"^".repeat(self.text.len());
+        write!(f, "{}\n{}\n{}", bold_white(brief), self.source, bold_yellow(cursor))
     }
 }

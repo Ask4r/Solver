@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use colors::bold_red;
 use solvers::{root, integral};
-use std;
+use std::{self, process::exit};
 
 pub mod colors;
 mod lexer;
@@ -52,17 +52,8 @@ fn main() {
 fn eval(expr: String) {
     println!("Text: `{}`", expr);
 
-    let mut lexer = lexer::Lexer::new(expr.clone());
-    let tokens = match lexer.parse() {
-        Ok(tokens) => tokens,
-        Err(e) => return print_error(e),
-    };
-
-    let mut parser = parser::Parser::new(expr.clone(), tokens);
-    let parsed_tokens = match parser.build() {
-        Ok(tokens) => tokens,
-        Err(e) => return print_error(e),
-    };
+    let tokens_it = lexer::Lexer::new(&expr).map(|res| res.map_err(print_err).unwrap());
+    let parsed_tokens = parser::Parser::new(&expr).build(tokens_it).map_err(print_err).unwrap();
 
     for tok in parsed_tokens {
         println!("{:?}", tok)
@@ -81,6 +72,8 @@ fn find_integral(expr: String, x1: String, x2: String) {
     println!("Integral (mock): {}", integral(|x| 3.0 * x * x, 0.0, 5.0, 0.000_000_1))
 }
 
-fn print_error<T: std::fmt::Display>(error: T) {
-    eprintln!("{}: {}", bold_red("Error"), error)
+fn print_err<T: std::fmt::Display>(error: T) {
+    eprintln!("{}: {}", bold_red("Error"), error);
+    exit(1);
 }
+

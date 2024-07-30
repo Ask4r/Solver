@@ -6,40 +6,40 @@ mod errors;
 #[cfg(test)]
 mod tests;
 
-pub struct Parser {
-    source: String,
-    tokens: Vec<Token>,
+pub struct Parser<'src> {
+    source: &'src str,
 }
 
-impl Parser {
-    pub fn new(source: String, tokens: Vec<Token>) -> Self {
-        Self { source, tokens }
+impl<'src> Parser<'src> {
+    pub fn new(source: &'src str) -> Self {
+        Self { source }
     }
 
-    pub fn build(&mut self) -> Result<Vec<Token>, ParsingError> {
+    pub fn build<I>(&mut self, tokens_it: I) -> Result<Vec<Token<'src>>, ParsingError<'src>>
+    where I: Iterator<Item=Token<'src>>{
         use Token::*;
         let mut op_stack: Vec<Token> = Vec::new();
         let mut postfix_list: Vec<Token> = Vec::new();
 
-        for token in self.tokens.iter() {
+        for token in tokens_it {
             match token {
-                Number { .. } | Const { .. } | Var { .. } => postfix_list.push(token.clone()),
-                LParen { .. } | Func { .. } => op_stack.push(token.clone()),
+                Number { .. } | Const { .. } | Var { .. } => postfix_list.push(token),
+                LParen { .. } | Func { .. } => op_stack.push(token),
                 RParen { pos: op_pos } => loop {
                     match op_stack.pop() {
                         Some(LParen { .. }) => break,
                         Some(item) => postfix_list.push(item),
-                        None => return Err(self.error_parsing(")".into(), *op_pos)),
+                        None => return Err(ParsingError::new(self.source, ")", op_pos)),
                     }
                 },
                 EOF => (),
                 _ => loop {
                     match op_stack.last() {
                         Some(oper) if Self::get_prec(oper) >= Self::get_prec(&token) => {
-                            postfix_list.push(oper.clone());
+                            postfix_list.push(*oper);
                             op_stack.pop();
                         }
-                        _ => break op_stack.push(token.clone()),
+                        _ => break op_stack.push(token),
                     }
                 },
             }
@@ -53,17 +53,13 @@ impl Parser {
     fn get_prec(token: &Token) -> u64 {
         match token {
             Token::UM { .. } => 5,
-            Token::Caret { .. } => 4,
-            Token::Star { .. } | Token::Slash { .. } => 3,
-            Token::Plus { .. } | Token::Minus { .. } => 2,
+            Token::Pow { .. } => 4,
+            Token::Mul { .. } | Token::Div { .. } => 3,
+            Token::Add { .. } | Token::Sub { .. } => 2,
             Token::RParen { .. } | Token::Comma { .. } => 1,
             Token::LParen { .. } => 0,
             _ => 10,
         }
-    }
-
-    fn error_parsing(&self, text: &str, pos: usize) -> ParsingError {
-        ParsingError::new(self.source.clone(), text.into(), pos)
     }
 }
 
