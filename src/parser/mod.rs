@@ -29,7 +29,7 @@ impl<'src> Parser<'src> {
                     match op_stack.pop() {
                         Some(LParen { .. }) => break,
                         Some(item) => postfix_list.push(item),
-                        None => return Err(ParsingError::new(self.source, ")", op_pos)),
+                        None => return Err(ParsingError::new("unmatched parenthesis", self.source, ")", op_pos)),
                     }
                 },
                 EOF => (),
@@ -45,8 +45,13 @@ impl<'src> Parser<'src> {
             }
         }
 
-        op_stack.reverse();
-        postfix_list.extend(op_stack);
+        while let Some(op) = op_stack.pop() {
+            match op {
+                LParen { pos: op_pos } => return Err(ParsingError::new("unmatched parenthesis", self.source, "(", op_pos)),
+                _ => postfix_list.push(op),
+            }
+        }
+
         Ok(postfix_list)
     }
 
