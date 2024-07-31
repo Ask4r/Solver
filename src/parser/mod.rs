@@ -55,7 +55,7 @@ impl<'src> Parser<'src> {
         Ok(postfix_list)
     }
 
-    pub fn calc(&self, postfix_list: &Vec<Token<'src>>, x: f64) -> Result<f64, EvaluationError<'src>> {
+    pub fn eval(&self, postfix_list: &Vec<Token<'src>>, x: Option<f64>) -> Result<f64, EvaluationError<'src>> {
         use Token::*;
 
         let mut stack = Vec::new();
@@ -64,7 +64,10 @@ impl<'src> Parser<'src> {
         while let Some(tok) = tokens_it.next() {
             match tok {
                 Number { value, .. } | Const { value, .. } => stack.push(*value),
-                Var { .. } => stack.push(x),
+                Var { .. } => match x {
+                    Some(value) => stack.push(value),
+                    None => return Err(EvaluationError::new("argument value is required", self.source, self.source, 0)),
+                }
                 UM { pos } => match stack.last_mut() {
                     Some(val) => *val *= -1.0,
                     _ => return Err(EvaluationError::new("unmatched operator", self.source, "-", *pos)),
@@ -103,10 +106,6 @@ impl<'src> Parser<'src> {
         }
 
         Ok(stack[0])
-    }
-
-    pub fn eval(&self, postfix_list: &Vec<Token<'src>>) -> Result<f64, EvaluationError<'src>> {
-        self.calc(&postfix_list, 0.0)
     }
 
     fn get_prec(token: &Token) -> u64 {

@@ -12,7 +12,7 @@ fn it_works() {
     let mut parser = Parser::new(text);
 
     let postfix_list = parser.parse(tokens_it).unwrap();
-    let result = parser.eval(&postfix_list).unwrap();
+    let result = parser.eval(&postfix_list, None).unwrap();
     let expected = -1.40827;
 
     assert!(f64::abs(result - expected) < 0.000_01);
