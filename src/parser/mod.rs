@@ -1,5 +1,5 @@
 use crate::tokens::Token;
-use errors::ParsingError;
+use errors::{EvaluationError, ParsingError};
 
 mod errors;
 
@@ -15,7 +15,7 @@ impl<'src> Parser<'src> {
         Self { source }
     }
 
-    pub fn build<I>(&mut self, tokens_it: I) -> Result<Vec<Token<'src>>, ParsingError<'src>>
+    pub fn parse<I>(&mut self, tokens_it: I) -> Result<Vec<Token<'src>>, ParsingError<'src>>
     where I: Iterator<Item=Token<'src>>{
         use Token::*;
         let mut op_stack: Vec<Token> = Vec::new();
@@ -25,11 +25,11 @@ impl<'src> Parser<'src> {
             match token {
                 Number { .. } | Const { .. } | Var { .. } => postfix_list.push(token),
                 LParen { .. } | Func { .. } => op_stack.push(token),
-                RParen { pos: op_pos } => loop {
+                RParen { pos } => loop {
                     match op_stack.pop() {
                         Some(LParen { .. }) => break,
                         Some(item) => postfix_list.push(item),
-                        None => return Err(ParsingError::new("unmatched parenthesis", self.source, ")", op_pos)),
+                        None => return Err(ParsingError::new("unmatched parenthesis", self.source, ")", pos)),
                     }
                 },
                 EOF => (),
@@ -47,12 +47,66 @@ impl<'src> Parser<'src> {
 
         while let Some(op) = op_stack.pop() {
             match op {
-                LParen { pos: op_pos } => return Err(ParsingError::new("unmatched parenthesis", self.source, "(", op_pos)),
+                LParen { pos } => return Err(ParsingError::new("unmatched parenthesis", self.source, "(", pos)),
                 _ => postfix_list.push(op),
             }
         }
 
         Ok(postfix_list)
+    }
+
+    pub fn calc(&self, postfix_list: &Vec<Token<'src>>, x: f64) -> Result<f64, EvaluationError<'src>> {
+        use Token::*;
+
+        let mut stack = Vec::new();
+        let mut tokens_it = postfix_list.iter();
+
+        while let Some(tok) = tokens_it.next() {
+            match tok {
+                Number { value, .. } | Const { value, .. } => stack.push(*value),
+                Var { .. } => stack.push(x),
+                UM { pos } => match stack.last_mut() {
+                    Some(val) => *val *= -1.0,
+                    _ => return Err(EvaluationError::new("unmatched operator", self.source, "-", *pos)),
+                }
+                Add { pos } => match (stack.pop(), stack.last_mut()) {
+                    (Some(val1), Some(val2)) => *val2 += val1,
+                    _ => return Err(EvaluationError::new("unmatched operator", self.source, "+", *pos)),
+                }
+                Sub { pos } => match (stack.pop(), stack.last_mut()) {
+                    (Some(val1), Some(val2)) => *val2 -= val1,
+                    _ => return Err(EvaluationError::new("unmatched operator", self.source, "-", *pos)),
+                }
+                Mul { pos } => match (stack.pop(), stack.last_mut()) {
+                    (Some(val1), Some(val2)) => *val2 *= val1,
+                    _ => return Err(EvaluationError::new("unmatched operator", self.source, "*", *pos)),
+                }
+                Div { pos } => match (stack.pop(), stack.last_mut()) {
+                    (Some(val1), Some(val2)) => *val2 /= val1,
+                    _ => return Err(EvaluationError::new("unmatched operator", self.source, "/", *pos)),
+                }
+                Pow { pos } => match (stack.pop(), stack.last_mut()) {
+                    (Some(val1), Some(val2)) => *val2 = val2.powf(val1),
+                    _ => return Err(EvaluationError::new("unmatched operator", self.source, "^", *pos)),
+                }
+                Func { text, func, pos } => match stack.last_mut() {
+                    Some(val) => *val = func(*val),
+                    _ => return Err(EvaluationError::new("expected arg for func", self.source, text, *pos)),
+                },
+                Comma { .. } => unimplemented!(),
+                LParen { .. } | RParen { .. } | EOF => (),
+            }
+        }
+
+        if stack.len() > 1 {
+            return Err(EvaluationError::new("missing operator", self.source, self.source, 0));
+        }
+
+        Ok(stack[0])
+    }
+
+    pub fn eval(&self, postfix_list: &Vec<Token<'src>>) -> Result<f64, EvaluationError<'src>> {
+        self.calc(&postfix_list, 0.0)
     }
 
     fn get_prec(token: &Token) -> u64 {

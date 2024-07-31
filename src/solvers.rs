@@ -1,7 +1,7 @@
 const ROOT_MAX_ITER: usize = 100_000;
 const INT_MAX_ITER: usize = 100_000;
 
-pub fn root(f: fn(f64) -> f64, mut x1: f64, mut x2: f64, eps: f64) -> Option<f64> {
+pub fn root(f: impl Fn(f64) -> f64, mut x1: f64, mut x2: f64, eps: f64) -> Option<f64> {
     let mut tmp;
     let mut x3;
     for _ in 0..ROOT_MAX_ITER {
@@ -36,7 +36,7 @@ pub fn root(f: fn(f64) -> f64, mut x1: f64, mut x2: f64, eps: f64) -> Option<f64
     return None;
 }
 
-pub fn integral(f: fn(f64) -> f64, mut x1: f64, mut x2: f64, eps: f64) -> f64 {
+pub fn integral(f: impl Fn(f64) -> f64, mut x1: f64, mut x2: f64, eps: f64) -> f64 {
     if x1 > x2 {
         let tmp = x1;
         x1 = x2;

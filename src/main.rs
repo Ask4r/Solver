@@ -20,21 +20,30 @@ struct Cli {
 enum Commands {
     /// Evaluate expression
     #[command(arg_required_else_help = true)]
-    Eval { expr: String },
-    /// Find root of the expression with variable `x` in the range
-    /// `x1` to `x2` (expressions allowed)
+    Eval {
+        /// Expression to be evaluated
+        expr: String,
+    },
+    /// Find root of the expression with variable `x` with `false position`
+    /// root-finding algorithm in the range `x1` to `x2` (expressions allowed)
     #[command(arg_required_else_help = true)]
     Root {
+        /// Expression with variable `x`
         expr: String,
+        /// Expression defining interval for root
         x1: String,
+        /// / ------------- ^^^^^ ------------- /
         x2: String,
     },
     /// Find definite integral of the function with variable `x`
     /// bounded by `x1` and `x2` (expressions allowed)
     #[command(arg_required_else_help = true)]
     Integral {
+        /// Expression with variable `x`
         expr: String,
+        /// Expression defining interval for integral
         x1: String,
+        /// / --------------- ^^^^^ --------------- /
         x2: String,
     },
 }
@@ -49,27 +58,52 @@ fn main() {
     }
 }
 
+fn exec_expr(expr: String) -> f64 {
+    let tokens_it = lexer::Lexer::new(&expr).map(|res|
+        res.map_err(print_err).unwrap()
+    );
+    let mut parser = parser::Parser::new(&expr);
+    let postfix_tokens = parser.parse(tokens_it).map_err(print_err).unwrap();
+    return parser.eval(&postfix_tokens).map_err(print_err).unwrap();
+}
+
 fn eval(expr: String) {
-    println!("Text: `{}`", expr);
-
-    let tokens_it = lexer::Lexer::new(&expr).map(|res| res.map_err(print_err).unwrap());
-    let parsed_tokens = parser::Parser::new(&expr).build(tokens_it).map_err(print_err).unwrap();
-
-    for tok in parsed_tokens {
-        println!("{:?}", tok)
-    }
+    println!("{}", exec_expr(expr));
 }
 
 fn find_root(expr: String, x1: String, x2: String) {
-    println!("Expr: {}", expr);
-    println!("Domain: ({};{})", x1, x2);
-    println!("Root (mock): {}", root(|x| x * 2.0, -5.0, 5.0, 0.000_001).unwrap())
+    const ROOT_EPS: f64 = 0.000_001;
+
+    let x1 = exec_expr(x1);
+    let x2 = exec_expr(x2);
+
+    let tokens_it = lexer::Lexer::new(&expr).map(|res|
+        res.map_err(print_err).unwrap()
+    );
+    let mut parser = parser::Parser::new(&expr);
+    let postfix_tokens = parser.parse(tokens_it).map_err(print_err).unwrap();
+    let f = |x| parser.calc(&postfix_tokens, x).map_err(print_err).unwrap();
+
+    match root(f, x1, x2, ROOT_EPS) {
+        Some(n) => println!("{}", n),
+        None => println!("could not find root"),
+    }
 }
 
 fn find_integral(expr: String, x1: String, x2: String) {
-    println!("Expr: {}", expr);
-    println!("Domain: ({};{})", x1, x2);
-    println!("Integral (mock): {}", integral(|x| 3.0 * x * x, 0.0, 5.0, 0.000_000_1))
+    const INTEGRAL_EPS: f64 = 0.000_001;
+
+    let x1 = exec_expr(x1);
+    let x2 = exec_expr(x2);
+
+    let tokens_it = lexer::Lexer::new(&expr).map(|res|
+        res.map_err(print_err).unwrap()
+    );
+    let mut parser = parser::Parser::new(&expr);
+    let postfix_tokens = parser.parse(tokens_it).map_err(print_err).unwrap();
+    let f = |x| parser.calc(&postfix_tokens, x).map_err(print_err).unwrap();
+
+    println!("{}", integral(f, x1, x2, INTEGRAL_EPS));
 }
 
 fn print_err<T: std::fmt::Display>(error: T) {
