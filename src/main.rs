@@ -1,11 +1,13 @@
 use clap::{Parser, Subcommand};
-use colors::bold_red;
-use solvers::{root, integral};
+use solver_error::SolverError;
+use solvers::{integral, root};
 use std::{self, process::exit};
 
 pub mod colors;
+mod executor;
 mod lexer;
 mod parser;
+pub mod solver_error;
 mod solvers;
 pub mod tokens;
 
@@ -68,78 +70,100 @@ fn main() {
     let args = Cli::parse();
 
     match args.command {
-        Commands::Eval { expr, x } => cmd_eval(expr, x),
-        Commands::Root { expr, x1, x2, eps, max_iterations } =>
-            cmd_root(expr, x1, x2, eps, max_iterations),
-        Commands::Integral { expr, x1, x2, eps, max_iterations } =>
-            cmd_integral(expr, x1, x2, eps, max_iterations),
+        Commands::Eval { expr, x } => run_eval(expr, x),
+        Commands::Root {
+            expr,
+            x1,
+            x2,
+            eps,
+            max_iterations,
+        } => run_root(expr, x1, x2, eps, max_iterations),
+        Commands::Integral {
+            expr,
+            x1,
+            x2,
+            eps,
+            max_iterations,
+        } => run_integral(expr, x1, x2, eps, max_iterations),
+    }
+}
+
+fn get_expr_closure(expr: &str) -> impl Fn(f64) -> f64 + '_ {
+    let tokens_it = lexer::analyse(&expr).map(|res| res.map_err(|e| print_error(e, &expr)).unwrap());
+    let postfix_tokens = parser::parse(tokens_it)
+        .map_err(|e| print_error(e, &expr))
+        .unwrap();
+    move |x| {
+        executor::eval(&postfix_tokens, Some(x))
+            .map_err(|e| print_error(e, &expr))
+            .unwrap()
     }
 }
 
 fn eval_expr(expr: String, x: Option<String>) -> f64 {
+    let unwrap_solver = get_solver_unwrapper(&expr);
     let x_value = match x {
         Some(x_expr) => Some(eval_expr(x_expr, None)),
         None => None,
     };
-    let tokens_it = lexer::Lexer::new(&expr).map(|res|
-        res.map_err(print_err).unwrap()
-    );
-    let mut parser = parser::Parser::new(&expr);
-    let postfix_tokens = parser.parse(tokens_it).map_err(print_err).unwrap();
-    return parser.eval(&postfix_tokens, x_value).map_err(print_err).unwrap();
+    let tokens_it = lexer::analyse(&expr).map(unwrap_solver);
+    let postfix_tokens = parser::parse(tokens_it)
+        .map_err(|e| print_error(e, &expr))
+        .unwrap();
+    return executor::eval(&postfix_tokens, x_value)
+        .map_err(|e| print_error(e, &expr))
+        .unwrap();
 }
 
-fn cmd_eval(expr: String, x: Option<String>) {
+fn run_eval(expr: String, x: Option<String>) {
     println!("{}", eval_expr(expr, x));
 }
 
-fn cmd_root(expr: String, x1: String, x2: String,
-            eps: Option<String>, max_iterations: Option<usize>) {
-    const ROOT_EPS: f64 = 0.000_001;
+fn print_error(error: impl SolverError, source: &str) {
+    eprintln!("{}", error.display_solver_error(source));
+    exit(1);
+}
 
+fn get_solver_unwrapper<T, E: SolverError>(expr: &str) -> impl Fn(Result<T, E>) -> T + '_ {
+    |result| result.map_err(|error| print_error(error, expr)).unwrap()
+}
+
+fn run_root(
+    expr: String,
+    x1: String,
+    x2: String,
+    eps: Option<String>,
+    max_iterations: Option<usize>,
+) {
+    const ROOT_EPS: f64 = 0.000_001;
     let x1 = eval_expr(x1, None);
     let x2 = eval_expr(x2, None);
     let eps = match eps {
         Some(eps_expr) => eval_expr(eps_expr, None),
         None => ROOT_EPS,
     };
-
-    let tokens_it = lexer::Lexer::new(&expr).map(|res|
-        res.map_err(print_err).unwrap()
-    );
-    let mut parser = parser::Parser::new(&expr);
-    let postfix_tokens = parser.parse(tokens_it).map_err(print_err).unwrap();
-    let f = |x| parser.eval(&postfix_tokens, Some(x)).map_err(print_err).unwrap();
-
-    match root(f, x1, x2, eps, max_iterations) {
+    match root(get_expr_closure(&expr), x1, x2, eps, max_iterations) {
         Some(n) => println!("{}", n),
         None => println!("could not find root"),
     }
 }
 
-fn cmd_integral(expr: String, x1: String, x2: String,
-                eps: Option<String>, max_iterations: Option<usize>) {
+fn run_integral(
+    expr: String,
+    x1: String,
+    x2: String,
+    eps: Option<String>,
+    max_iterations: Option<usize>,
+) {
     const INTEGRAL_EPS: f64 = 0.000_001;
-
     let x1 = eval_expr(x1, None);
     let x2 = eval_expr(x2, None);
     let eps = match eps {
         Some(eps_expr) => eval_expr(eps_expr, None),
         None => INTEGRAL_EPS,
     };
-
-    let tokens_it = lexer::Lexer::new(&expr).map(|res|
-        res.map_err(print_err).unwrap()
+    println!(
+        "{}",
+        integral(get_expr_closure(&expr), x1, x2, eps, max_iterations)
     );
-    let mut parser = parser::Parser::new(&expr);
-    let postfix_tokens = parser.parse(tokens_it).map_err(print_err).unwrap();
-    let f = |x| parser.eval(&postfix_tokens, Some(x)).map_err(print_err).unwrap();
-
-    println!("{}", integral(f, x1, x2, eps, max_iterations));
 }
-
-fn print_err<T: std::fmt::Display>(error: T) {
-    eprintln!("{}: {}", bold_red("Error"), error);
-    exit(1);
-}
-

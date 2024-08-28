@@ -1,47 +1,27 @@
-use crate::colors::{bold_white, bold_yellow};
-use std::fmt;
+use crate::colors::{bold_yellow, bold_red};
+use crate::solver_error::SolverError;
 
 #[derive(Clone, Debug)]
-pub struct ParsingError<'src> {
-    msg: &'static str,
-    source: &'src str,
-    text: &'src str,
-    pos: usize,
+pub enum ParsingError<'src> {
+    UnmatchedParenthesis { text: &'src str, pos: usize },
 }
 
-impl<'src> ParsingError<'src> {
-    pub fn new(msg: &'static str, source: &'src str, text: &'src str, pos: usize) -> Self {
-        Self { msg, source, text, pos }
-    }
-}
+impl SolverError for ParsingError<'_> {
+    fn display_solver_error(&self, source: &str) -> String {
+        let (msg, text, pos) = match self {
+            Self::UnmatchedParenthesis { text, pos } => ("unmatched parethesis", text, pos),
+        };
 
-impl fmt::Display for ParsingError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let brief = format!("{} `{}` at {}", self.msg, self.text, self.pos);
-        let cursor = " ".repeat(self.pos) + &"^".repeat(self.text.len());
-        write!(f, "{}\n{}\n{}", bold_white(brief), self.source, bold_yellow(cursor))
-    }
-}
+        let brief = format!("{} `{}` at {}", msg, text, pos);
+        let cursor = " ".repeat(*pos) + &"^".repeat(text.len());
 
-#[derive(Clone, Debug)]
-pub struct EvaluationError<'src> {
-    msg: &'static str,
-    source: &'src str,
-    text: &'src str,
-    pos: usize,
-}
-
-impl<'src> EvaluationError<'src> {
-    pub fn new(msg: &'static str, source: &'src str, text: &'src str, pos: usize) -> Self {
-        Self { msg, source, text, pos }
-    }
-}
-
-impl fmt::Display for EvaluationError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let brief = format!("{} `{}` at {}", self.msg, self.text, self.pos);
-        let cursor = " ".repeat(self.pos) + &"^".repeat(self.text.len());
-        write!(f, "{}\n{}\n{}", bold_white(brief), self.source, bold_yellow(cursor))
+        format!(
+            "{}: {}\n{}\n{}",
+            bold_red("error"),
+            brief,
+            source,
+            bold_yellow(cursor),
+        )
     }
 }
 
