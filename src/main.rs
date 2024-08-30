@@ -89,7 +89,8 @@ fn main() {
 }
 
 fn get_expr_closure(expr: &str) -> impl Fn(f64) -> f64 + '_ {
-    let tokens_it = lexer::analyse(&expr).map(|res| res.map_err(|e| print_error(e, &expr)).unwrap());
+    let tokens_it =
+        lexer::analyse(&expr).map(|res| res.map_err(|e| print_error(e, &expr)).unwrap());
     let postfix_tokens = parser::parse(tokens_it)
         .map_err(|e| print_error(e, &expr))
         .unwrap();

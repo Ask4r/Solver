@@ -1,25 +1,44 @@
-use crate::colors::{bold_yellow, bold_red};
+use crate::colors::{bold_red, bold_yellow};
 use crate::solver_error::SolverError;
 
 #[derive(Clone, Debug)]
-pub enum ExecutionError<'src> {
-    MissingArgumentValue { text: &'src str, pos: usize },
-    UnmatchedOperator { text: &'src str, pos: usize },
-    MissigOperator { text: &'src str, pos: usize },
-    WrongArgs { text: &'src str, pos: usize },
+pub struct ExecutionError<'src> {
+    text: &'src str,
+    pos: usize,
+    error_type: ExecutionErrorType,
+}
+
+#[derive(Clone, Debug)]
+pub enum ExecutionErrorType {
+    MissingArgumentValue,
+    UnmatchedOperator,
+    MissigOperator,
+    WrongArgs,
+}
+
+impl<'src> ExecutionError<'src> {
+    pub fn new(pos: usize, text: &'src str, error_type: ExecutionErrorType) -> Self {
+        Self {
+            pos,
+            text,
+            error_type,
+        }
+    }
 }
 
 impl SolverError for ExecutionError<'_> {
     fn display_solver_error(&self, source: &str) -> String {
-        let (msg, text, pos) = match self {
-            Self::MissingArgumentValue { text, pos } => ("argument value is required", text, pos),
-            Self::UnmatchedOperator { text, pos } => ("missing operand for", text, pos),
-            Self::MissigOperator { text, pos } => ("missing operator", text, pos),
-            Self::WrongArgs { text, pos } => ("missing operator", text, pos),
+        use ExecutionErrorType::*;
+
+        let msg = match self.error_type {
+            MissingArgumentValue => "argument value is required",
+            UnmatchedOperator => "missing operand for",
+            MissigOperator => "missing operator",
+            WrongArgs => "wrong arguments for",
         };
 
-        let brief = format!("{} `{}` at {}", msg, text, pos);
-        let cursor = " ".repeat(*pos) + &"^".repeat(text.len());
+        let brief = format!("{} `{}` at {}", msg, self.text, self.pos);
+        let cursor = " ".repeat(self.pos) + &"^".repeat(self.text.len());
 
         format!(
             "{}: {}\n{}\n{}",
@@ -30,4 +49,3 @@ impl SolverError for ExecutionError<'_> {
         )
     }
 }
-

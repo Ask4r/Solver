@@ -1,19 +1,38 @@
-use crate::colors::{bold_yellow, bold_red};
+use crate::colors::{bold_red, bold_yellow};
 use crate::solver_error::SolverError;
 
 #[derive(Clone, Debug)]
-pub enum ParsingError<'src> {
-    UnmatchedParenthesis { text: &'src str, pos: usize },
+pub struct ParsingError<'src> {
+    pos: usize,
+    text: &'src str,
+    error_type: ParsingErrorType,
+}
+
+#[derive(Clone, Debug)]
+pub enum ParsingErrorType {
+    UnmatchedParenthesis,
+}
+
+impl<'src> ParsingError<'src> {
+    pub fn new(pos: usize, text: &'src str, error_type: ParsingErrorType) -> Self {
+        Self {
+            pos,
+            text,
+            error_type,
+        }
+    }
 }
 
 impl SolverError for ParsingError<'_> {
     fn display_solver_error(&self, source: &str) -> String {
-        let (msg, text, pos) = match self {
-            Self::UnmatchedParenthesis { text, pos } => ("unmatched parethesis", text, pos),
+        use ParsingErrorType::*;
+
+        let msg = match self.error_type {
+            UnmatchedParenthesis => "unmatched parethesis",
         };
 
-        let brief = format!("{} `{}` at {}", msg, text, pos);
-        let cursor = " ".repeat(*pos) + &"^".repeat(text.len());
+        let brief = format!("{} `{}` at {}", msg, self.text, self.pos);
+        let cursor = " ".repeat(self.pos) + &"^".repeat(self.text.len());
 
         format!(
             "{}: {}\n{}\n{}",
@@ -24,4 +43,3 @@ impl SolverError for ParsingError<'_> {
         )
     }
 }
-

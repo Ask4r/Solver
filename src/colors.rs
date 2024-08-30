@@ -34,4 +34,3 @@ pub fn bold_magenta<T: Display>(text: T) -> String {
 pub fn bold_cyan<T: Display>(text: T) -> String {
     format!("\x1B[1;36m{}\x1B[0m", text)
 }
-

@@ -1,23 +1,42 @@
-use crate::colors::{bold_yellow, bold_red};
+use crate::colors::{bold_red, bold_yellow};
 use crate::solver_error::SolverError;
 
 #[derive(Clone, Debug)]
-pub enum AnalyseError<'src> {
-    WrongNumber { text: &'src str, pos: usize },
-    UnknownIdent { text: &'src str, pos: usize },
-    UnknownSymbol { text: &'src str, pos: usize },
+pub struct AnalyseError<'src> {
+    pos: usize,
+    text: &'src str,
+    error_type: AnalyseErrorType,
+}
+
+#[derive(Clone, Debug)]
+pub enum AnalyseErrorType {
+    WrongNumber,
+    UnknownIdent,
+    UnknownSymbol,
+}
+
+impl<'src> AnalyseError<'src> {
+    pub fn new(pos: usize, text: &'src str, error_type: AnalyseErrorType) -> Self {
+        Self {
+            pos,
+            text,
+            error_type,
+        }
+    }
 }
 
 impl SolverError for AnalyseError<'_> {
     fn display_solver_error(&self, source: &str) -> String {
-        let (msg, text, pos) = match self {
-            Self::WrongNumber { text, pos } => ("could not parse number", text, pos),
-            Self::UnknownIdent { text, pos } => ("unknown identifier", text, pos),
-            Self::UnknownSymbol { text, pos } => ("unknown symbol", text, pos),
+        use AnalyseErrorType::*;
+
+        let msg = match self.error_type {
+            WrongNumber => "could not parse number",
+            UnknownIdent => "unknown identifier",
+            UnknownSymbol => "unknown symbol",
         };
 
-        let brief = format!("{} `{}` at {}", msg, text, pos);
-        let cursor = " ".repeat(*pos) + &"^".repeat(text.len());
+        let brief = format!("{} `{}` at {}", msg, self.text, self.pos);
+        let cursor = " ".repeat(self.pos) + &"^".repeat(self.text.len());
 
         format!(
             "{}: {}\n{}\n{}",
@@ -28,4 +47,3 @@ impl SolverError for AnalyseError<'_> {
         )
     }
 }
-

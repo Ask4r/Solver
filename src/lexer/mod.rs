@@ -1,8 +1,9 @@
-use crate::tokens::Token;
-use errors::AnalyseError;
-use std::f64;
+use crate::tokens::{Token, TokenType};
+use errors::{AnalyseError, AnalyseErrorType};
+use parsers::{parse_ident, parse_number};
 
 pub mod errors;
+mod parsers;
 
 #[cfg(test)]
 mod tests;
@@ -12,15 +13,13 @@ pub fn analyse<'src>(source: &'src str) -> LexerIterator<'src> {
         source,
         pos: 0,
         ch: source.as_bytes()[0],
-        prev_tok: None,
     }
 }
 
-struct LexerIterator<'src> {
+pub struct LexerIterator<'src> {
     source: &'src str,
     pos: usize,
     ch: u8,
-    prev_tok: Option<Token<'src>>,
 }
 
 impl<'src> LexerIterator<'src> {
@@ -38,67 +37,66 @@ impl<'src> LexerIterator<'src> {
             self.read_ch();
         }
     }
+
+    fn read_number(&mut self) -> &'src str {
+        let pos = self.pos;
+        while self.ch.is_ascii_digit() || self.ch == b'.' {
+            self.read_ch();
+        }
+        return &self.source[pos..self.pos];
+    }
+
+    fn read_ident(&mut self) -> &'src str {
+        let pos = self.pos;
+        while self.ch.is_ascii_alphabetic() || self.ch.is_ascii_digit() || self.ch == b'_' {
+            self.read_ch();
+        }
+        return &self.source[pos..self.pos];
+    }
 }
 
 impl<'src> Iterator for LexerIterator<'src> {
     type Item = Result<Token<'src>, AnalyseError<'src>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        use AnalyseError::*;
-        use Token::*;
+        use AnalyseErrorType::*;
+        use TokenType::*;
         self.skip_whitespace();
 
-        let tok = match self.ch {
-            b'+' => Add { pos: self.pos },
-            b'-' => match self.prev_tok {
-                Some(tok) if tok.is_operand() || matches!(tok, RParen { .. }) => {
-                    Sub { pos: self.pos }
-                }
-                _ => UM { pos: self.pos },
-            },
-            b'*' => Mul { pos: self.pos },
-            b'/' => Div { pos: self.pos },
-            b'^' => Pow { pos: self.pos },
-            b'(' => LParen { pos: self.pos },
-            b')' => RParen { pos: self.pos },
-            b',' => Comma { pos: self.pos },
+        let token = match self.ch {
+            b'+' => Token::new(self.pos, "+", Add),
+            b'-' => Token::new(self.pos, "-", Sub),
+            b'*' => Token::new(self.pos, "*", Mul),
+            b'/' => Token::new(self.pos, "/", Div),
+            b'^' => Token::new(self.pos, "^", Pow),
+            b'(' => Token::new(self.pos, "(", LParen),
+            b')' => Token::new(self.pos, ")", RParen),
+            b',' => Token::new(self.pos, ",", Comma),
             b'0'..=b'9' | b'.' => {
-                let pos = self.pos;
-                while self.ch.is_ascii_digit() || self.ch == b'.' {
-                    self.read_ch();
-                }
-                let text = &self.source[pos..self.pos];
-                let tok = match text.parse::<f64>() {
-                    Ok(value) => Number { text, value, pos },
-                    Err(_) => return Some(Err(WrongNumber { text, pos })),
-                };
-                self.prev_tok = Some(tok);
-                return Some(Ok(tok));
+                let text = self.read_number();
+                return Some(match parse_number(text) {
+                    Some(tok) => Ok(Token::new(self.pos - text.len(), text, tok)),
+                    None => Err(AnalyseError::new(self.pos - text.len(), text, WrongNumber)),
+                });
             }
             b'A'..=b'Z' | b'a'..=b'z' | b'_' => {
-                let pos = self.pos;
-                while self.ch.is_ascii_alphabetic() || self.ch.is_ascii_digit() || self.ch == b'_' {
-                    self.read_ch();
-                }
-                let text = &self.source[pos..self.pos];
-                let tok = match Token::from_text(text, pos) {
-                    Some(tok) => tok,
-                    None => return Some(Err(UnknownIdent { text, pos })),
-                };
-                self.prev_tok = Some(tok);
-                return Some(Ok(tok));
+                let text = self.read_ident();
+                return Some(match parse_ident(text) {
+                    Some(tok) => Ok(Token::new(self.pos - text.len(), text, tok)),
+                    None => Err(AnalyseError::new(self.pos - text.len(), text, UnknownIdent)),
+                });
             }
             0 => return None,
             _ => {
-                return Some(Err(UnknownSymbol {
-                    text: &self.source[self.pos..self.pos + 1],
-                    pos: self.pos,
-                }))
+                return Some(Err(AnalyseError::new(
+                    self.pos,
+                    &self.source[self.pos..self.pos + 1],
+                    UnknownSymbol,
+                )));
             }
         };
 
         self.read_ch();
-        self.prev_tok = Some(tok);
-        return Some(Ok(tok));
+        return Some(Ok(token));
     }
 }
