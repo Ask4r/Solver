@@ -21,7 +21,18 @@ where
     while let Some(token) = tokens_it.next() {
         match token.token_type {
             Number(_) | Var | Const(_) => postfix_list.push(token),
-            Func { .. } => operator_stack.push(token),
+            Func { .. } => match tokens_it.peek() {
+                Some(Token {
+                    token_type: LParen, ..
+                }) => operator_stack.push(token),
+                _ => {
+                    return Err(ParsingError::new(
+                        token.pos,
+                        token.text,
+                        UnmatchedParenthesis,
+                    ))
+                }
+            },
             LParen => operator_stack.push(token),
             RParen => loop {
                 match operator_stack.pop() {
